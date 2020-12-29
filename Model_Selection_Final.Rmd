@@ -1,0 +1,458 @@
+---
+title: "Model Selection"
+author: "Blake Shaw, Apurv Srivastav, and Zhenyuan Yu"
+date: "11/16/2020"
+output: html_document
+---
+
+## Define Training and Validation Data
+```{r}
+
+prostate <- read.table("C:/Users/Blake/Documents/UC Davis/STA 206/Project/prostate.txt")
+names(prostate) <- c("Patient_ID", "PSA", "CV", "Weight", "Age", "PH", "SVI", "DCP", "GS")
+
+prostate[is.na(prostate)==T]
+
+prostate$SVI <- as.factor(prostate$SVI)
+prostate$GS <- as.factor(prostate$GS)
+
+#definijtley remove weight outlier
+prostate <- prostate[-c(32),]
+# maybe remove Cv outlier later
+
+str(prostate)
+pros_x<-prostate[,3:9]
+
+sapply(prostate, class)
+
+fit <- lm(PSA ~ . - Patient_ID, data = prostate)
+summary(fit)
+
+library(MASS)
+boxcox(fit)
+
+prostate_log <- prostate[,-c(1,2)]
+prostate_log$PSA_log <- log(prostate$PSA)
+head(prostate_log)
+fit2 <- lm(log(PSA) ~ . - Patient_ID, data = prostate)
+summary(fit2)
+
+plot(fit2, c(1,2))
+plot(fit, c(1,2))
+
+set.seed(50)
+n = nrow(prostate_log)/2
+ind = sample(1:(2*n), n, replace=FALSE)
+train = prostate_log[ind, ] #training set
+valid = prostate_log[-ind, ]
+
+```
+
+## Model Stepwise
+```{r}
+none_mod = lm(PSA_log ~1, data= train) ##model with only intercept
+full_mod = lm(PSA_log ~ .^2, data=train)
+#full_mod = lm(PSA_log ~ CV+CV^2+Weight+Weight^2+Age+Age^2+PH+PH^2+SVI+ SVI^2+DCP+DCP^2+GS+GS^2+CV:Weight+CV:Age+CV:PH+CV:SVI+CV:DCP+CV:GS+Weight:Age+Weight:PH+Weight:SVI+Weight:DCP+Weight:GS+Age:PH+Age:SVI+Age:DCP+Age:GS+PH:SVI+PH:DCP+PH:GS+SVI:DCP+SVI:GS+DCP:GS, data=train) ## second order model with 9 predictors 
+
+
+#forward selection based on AIC: 
+mod1 <- stepAIC(none_mod , scope=list(upper=full_mod, lower = ~ 1), direction="forward", k=2, trace = FALSE)
+
+#backward elimination based on AIC
+mod2 <- stepAIC(full_mod, scope=list(upper=full_mod, lower = ~1), direction="backward", k=2, trace = FALSE)
+
+#forward stepwise based on AIC
+mod3 <- stepAIC(none_mod, scope=list(upper=full_mod, lower = ~1), direction="both", k=2, trace = FALSE)
+
+#backward stepwise based on AIC
+mod4 <- stepAIC(full_mod, scope=list(upper=full_mod, lower = ~1), direction="both", k=2, trace = FALSE)
+
+
+#selection based on BIC: set option "k=log(n)"
+mod5 <- stepAIC(none_mod, scope=list(upper=full_mod, lower = ~1), direction="forward", k=log(n), trace = FALSE)
+
+mod6 <- stepAIC(full_mod, scope=list(upper=full_mod, lower = ~1), direction="backward", k=log(n), trace = FALSE)
+
+mod7 <- stepAIC(none_mod, scope=list(upper=full_mod, lower = ~1), direction="both", k=log(n), trace = FALSE)
+
+mod8 <- stepAIC(full_mod, scope=list(upper=full_mod, lower = ~1), direction="both", k=log(n), trace = FALSE)
+```
+
+## Model 1 (AIC: Forward Selection)
+```{r}
+summary(mod1)
+
+plot(mod1, c(1,2))
+```
+
+## Model 2 (AIC: Backward Elimination)
+```{r}
+summary(mod2)
+
+plot(mod2, c(1,2))
+```
+
+## Model 3 (AIC Forward stepwise)
+```{r}
+summary(mod3)
+
+plot(mod3, c(1,2))
+```
+
+## Model 4 (AIC Backward stepwise)
+```{r}
+summary(mod4)
+
+
+plot(mod4, c(1,2))
+```
+
+## Model 5 (BIC Forward Selection)
+```{r}
+summary(mod5)
+
+
+plot(mod5, c(1,2))
+```
+
+## Model 6 (BIC backward Elimination)
+```{r}
+summary(mod6)
+
+
+plot(mod6, c(1,2))
+```
+
+## Model 7 (BIC forward stepwise)
+```{r}
+summary(mod7)
+
+
+plot(mod7, c(1,2))
+```
+
+## Model 8 (BIC backward stepwise)
+```{r}
+summary(mod8)
+
+
+plot(mod8, c(1,2))
+```
+
+### Four different models were selected from the 8 different stepwise processes. We redfeine the four models {(Model A: Model 1 and 3), (Model B: Model 2 and Model 4), (Model C: Model 5 and 7), and (Model D: Model 6 and Model 8)}
+```{r}
+modA<- lm(PSA_log ~ CV + GS + Weight + SVI + Weight:SVI, data = train)
+modB<-lm(PSA_log ~ CV + Weight + Age + PH + SVI + DCP + GS +  CV:Weight + CV:Age + CV:PH + CV:DCP + CV:GS + Weight:Age + Weight:GS + Age:GS + PH:SVI + PH:DCP + PH:GS + SVI:DCP + SVI:GS + DCP:GS, data = train)
+modC<- lm(PSA_log ~ CV + GS + Weight, data = train)
+modD<- lm(PSA_log ~ CV + Weight + Age + SVI + DCP + GS + CV:Age + Weight:Age + Weight:GS + Age:DCP, data = train)
+```
+
+## $Press_p$ values
+```{r}
+
+PRESS_modA = sum((modA$residuals/(1-influence(modA)$hat))^2)
+PRESS_modB = sum((modB$residuals/(1-influence(modB)$hat))^2)
+PRESS_modC = sum((modC$residuals/(1-influence(modC)$hat))^2)
+PRESS_modD = sum((modD$residuals/(1-influence(modD)$hat))^2)
+
+
+c(PRESS_modA, PRESS_modB, PRESS_modC, PRESS_modD)
+```
+
+## Outliers
+
+### Model A
+```{r}
+library(MASS)
+res=modA$residuals
+p_A=6
+stu.res.del = studres(modA)
+v<-head(sort(abs(stu.res.del), decreasing=TRUE))
+v
+qt(1-.1/(2*n), n-p_A-1)
+idx.Y = which(v>=qt(1-0.1/(2*n),n-p_A-1))
+idx.Y
+h=influence(modA)$hat
+idx.X = as.vector(which(h>(2*p_A/n)))
+sort(h[which(h>2*p_A/n)], decreasing = TRUE)
+mse.modA=anova(modA)["Residuals",3] #MSE for Model A
+cook.d = res^2*h/(p_A*mse.modA*(1-h)^2)
+plot(modA,which=4)
+sort(cook.d[which(cook.d>4/(n-p_A))], decreasing = TRUE)
+cook.max = cook.d[which(cook.d==max(cook.d))]
+print(cook.max)
+
+```
+
+#### Since the case that has the maximum cook's distance (case 94) is also an X outlier we can remove it from model A.
+```{r}
+which(rownames(train)=="94")
+modA.94<-lm(PSA_log ~ CV + GS + Weight + SVI + Weight:SVI, data = train, subset=setdiff(rownames(train),"94"))
+rbind(modA$coefficients,modA.94$coefficients)
+plot(modA$fitted.value, predict(modA.94, train[,c("CV","GS","Weight","SVI")]), xlab="fitted values using all cases", ylab="fitted values without using case 94")
+```
+
+#### As can be seen, there is little difference in these two models, so case 94 can be retained.
+
+### Model B
+
+```{r}
+res=modB$residuals
+p_B=22
+stu.res.del = studres(modB)
+v<-head(sort(abs(stu.res.del), decreasing=TRUE))
+v
+qt(1-.1/(2*n), n-p_B-1)
+idx.Y = which(v>=qt(1-0.1/(2*n),n-p_B-1))
+idx.Y
+h=influence(modB)$hat
+idx.X = as.vector(which(h>(2*p_B/n)))
+sort(h[which(h>2*p_B/n)], decreasing = TRUE)
+mse.modB=anova(modB)["Residuals",3] #MSE for Model B
+cook.d = res^2*h/(p_B*mse.modB*(1-h)^2)
+plot(modB,which=4)
+sort(cook.d[which(cook.d>4/(n-p_B))], decreasing = TRUE)
+cook.max = cook.d[which(cook.d==max(cook.d))]
+print(cook.max)
+```
+
+#### Since the case that has the maximum cook's distance (case 95) is also an X outlier we can remove it from model B.
+```{r}
+which(rownames(train)=="95")
+trainB<-train[-34,]
+modB.95<-lm(PSA_log ~ CV + Weight + Age + PH + SVI + DCP + GS +  CV:Weight + CV:Age + CV:PH + CV:DCP + CV:GS + Weight:Age + Weight:GS + Age:GS + PH:SVI + PH:DCP + PH:GS + SVI:DCP + SVI:GS + DCP:GS, data = train, subset=setdiff(rownames(train),"95"))
+rbind(modB$coefficients,modB.95$coefficients)
+plot(modB$fitted.value, predict(modB.95, train[,c("CV","GS","Weight","SVI","Age","PH","DCP")]), xlab="fitted values using all cases", ylab="fitted values without using case 95")
+```
+
+#### As can be seen, there is a bit difference in these two models, so case 95 cannot be retained.
+
+### Model C
+```{r}
+res=modC$residuals
+p_C=4
+stu.res.del = studres(modC)
+v<-head(sort(abs(stu.res.del), decreasing=TRUE))
+v
+qt(1-.1/(2*n), n-p_C-1)
+idx.Y = which(v>=qt(1-0.1/(2*n),n-p_C-1))
+idx.Y
+h=influence(modC)$hat
+idx.X = as.vector(which(h>(2*p_C/n)))
+sort(h[which(h>2*p_C/n)], decreasing = TRUE)
+mse.modC=anova(modC)["Residuals",3] #MSE for Model C
+cook.d = res^2*h/(p_C*mse.modC*(1-h)^2)
+plot(modC, which=4)
+sort(cook.d[which(cook.d>4/(n-p_C))], decreasing = TRUE)
+cook.max = cook.d[which(cook.d==max(cook.d))]
+print(cook.max)
+```
+
+#### Since the case that has the maximum cook's distance (case 94) is also an X outlier we can remove it from model C.
+
+```{r}
+which(rownames(train)=="94")
+modC.94<-lm(PSA_log ~ CV + GS + Weight, data = train, subset=setdiff(rownames(train),"94"))
+rbind(modC$coefficients,modC.94$coefficients)
+plot(modC$fitted.value, predict(modC.94, train[,c("CV","GS","Weight")]), xlab="fitted values using all cases", ylab="fitted values without using case 95")
+```
+
+#### As can be seen, there is little difference in these two models, so case 94 can be retained.
+
+### Model D
+```{r}
+res=modD$residuals
+p_D=11
+stu.res.del = studres(modD)
+v<-head(sort(abs(stu.res.del), decreasing=TRUE))
+v
+qt(1-.1/(2*n), n-p_D-1)
+idx.Y = which(v>=qt(1-0.1/(2*n),n-p_D-1))
+idx.Y
+h=influence(modD)$hat
+idx.X = as.vector(which(h>(2*p_D/n)))
+sort(h[which(h>2*p_D/n)], decreasing = TRUE)
+mse.modD=anova(modD)["Residuals",3] #MSE for Model D
+cook.d = res^2*h/(p_D*mse.modD*(1-h)^2)
+plot(modD,which=4)
+sort(cook.d[which(cook.d>4/(n-p_D))], decreasing = TRUE)
+cook.max = cook.d[which(cook.d==max(cook.d))]
+print(cook.max)
+```
+
+#### Since the case that has the maximum cook's distance (case 47) is also an X outlier we can remove it from model D.
+```{r}
+which(rownames(train)=="47")
+modD.47<-lm(PSA_log ~ CV + Weight + Age + SVI + DCP + GS + CV:Age + Weight:Age + Weight:GS + Age:DCP, data = train, subset=setdiff(rownames(train),"94"))
+rbind(modD$coefficients,modD.47$coefficients)
+plot(modD$fitted.value, predict(modD.47, train[,c("CV","GS","Weight","Age","SVI","DCP")]), xlab="fitted values using all cases", ylab="fitted values without using case 95")
+```
+
+#### As can be seen, there is little difference in these two models, so case 47 can be retained.
+
+## Model Validation
+
+### Estimates and Standard Errors
+
+#### Model A
+```{r}
+train1A <- lm(PSA_log ~ CV + GS + Weight + SVI + Weight:SVI, data = train)
+
+valid1A <- lm(PSA_log ~ CV + GS + Weight + SVI + Weight:SVI, data = valid)
+
+mod_sumA = cbind(coef(summary(train1A))[,1], coef(summary(valid1A))[,1],
+coef(summary(train1A))[,2], coef(summary(valid1A))[,2])
+colnames(mod_sumA) = c("Train Est","Valid Est","Train s.e.","Valid s.e.")
+
+mod_sumA
+```
+
+#### Model B
+```{r}
+
+train1B <- lm(PSA_log ~ CV + GS + Weight + SVI + Weight:SVI, data = trainB)
+
+valid1B <- lm(PSA_log ~ CV + Weight + Age + PH + SVI + DCP + GS +  CV:Weight + CV:Age + CV:PH + CV:DCP + CV:GS + Weight:Age + Weight:GS + Age:GS + PH:SVI + PH:DCP + PH:GS + SVI:DCP + SVI:GS + DCP:GS, data = valid)
+
+mod_sumB = cbind(coef(summary(train1B))[,1], coef(summary(valid1B))[,1],
+coef(summary(train1B))[,2], coef(summary(valid1B))[,2])
+colnames(mod_sumB) = c("Train Est","Valid Est","Train s.e.","Valid s.e.")
+
+mod_sumB
+```
+
+#### Model C
+```{r}
+train1C <- lm(PSA_log ~ CV + GS + Weight, data = train)
+
+valid1C <- lm(PSA_log ~ CV + GS + Weight, data = valid)
+
+mod_sumC = cbind(coef(summary(train1C))[,1], coef(summary(valid1C))[,1],
+coef(summary(train1C))[,2], coef(summary(valid1C))[,2])
+colnames(mod_sumC) = c("Train Est","Valid Est","Train s.e.","Valid s.e.")
+
+mod_sumC
+```
+
+#### Model D
+```{r}
+train1D <- lm(PSA_log ~ CV + Weight + Age + SVI + DCP + GS + CV:Age + Weight:Age + Weight:GS + Age:DCP, data = train)
+
+valid1D <- lm(PSA_log ~ CV + Weight + Age + SVI + DCP + GS + CV:Age + Weight:Age + Weight:GS + Age:DCP, data = valid)
+
+mod_sumD = cbind(coef(summary(train1D))[,1], coef(summary(valid1D))[,1],
+coef(summary(train1D))[,2], coef(summary(valid1D))[,2])
+colnames(mod_sumD) = c("Train Est","Valid Est","Train s.e.","Valid s.e.")
+
+mod_sumD
+```
+
+### SSE and $R_a^2$
+#### Model A
+```{r}
+sse_tA = sum(train1A$residuals^2)
+sse_vA = sum(valid1A$residuals^2)
+Radj_tA = summary(train1A)$adj.r.squared
+Radj_vA = summary(valid1A)$adj.r.squared
+train_sumA = c(sse_tA,Radj_tA)
+valid_sumA = c(sse_vA,Radj_vA)
+criteria.A = rbind(train_sumA,valid_sumA)
+colnames(criteria.A) = c("SSE","R2_adj")
+print(criteria.A)
+```
+
+#### Model B
+```{r}
+sse_tB = sum(train1B$residuals^2)
+sse_vB = sum(valid1B$residuals^2)
+Radj_tB = summary(train1B)$adj.r.squared
+Radj_vB = summary(valid1B)$adj.r.squared
+train_sumB = c(sse_tB,Radj_tB)
+valid_sumB= c(sse_vB,Radj_vB)
+criteria.B = rbind(train_sumB,valid_sumB)
+colnames(criteria.B) = c("SSE","R2_adj")
+print(criteria.B)
+
+```
+
+#### Model C
+```{r}
+sse_tC = sum(train1C$residuals^2)
+sse_vC = sum(valid1C$residuals^2)
+Radj_tC = summary(train1C)$adj.r.squared
+Radj_vC = summary(valid1C)$adj.r.squared
+train_sumC = c(sse_tC,Radj_tC)
+valid_sumC= c(sse_vC,Radj_vC)
+criteria.C = rbind(train_sumC,valid_sumC)
+colnames(criteria.C) = c("SSE","R2_adj")
+print(criteria.C)
+```
+
+#### Model D
+```{r}
+sse_tD = sum(train1D$residuals^2)
+sse_vD = sum(valid1D$residuals^2)
+Radj_tD = summary(train1D)$adj.r.squared
+Radj_vD = summary(valid1D)$adj.r.squared
+train_sumD = c(sse_tD,Radj_tD)
+valid_sumD= c(sse_vD,Radj_vD)
+criteria.D = rbind(train_sumD,valid_sumD)
+colnames(criteria.D) = c("SSE","R2_adj")
+print(criteria.D)
+```
+
+### $C_p$
+
+```{r}
+cA<-sse_tA/summary(modA)$sigma^2-(n-2*p_A)
+cB<-sse_tB/summary(modB)$sigma^2-(n-2*p_B)
+cC<-sse_tC/summary(modC)$sigma^2-(n-2*p_C)
+cD<-sse_tD/summary(modD)$sigma^2-(n-2*p_D)
+Cp<-c(cA,cB,cC,cD)
+names(Cp)<-c("Cp_A","Cp_B","Cp_C","Cp_D")
+print(Cp)
+```
+
+### MSPE vs SSE/n and $Press_p/n$
+
+#### Model A
+```{r}
+newdata = valid[, -8]
+y.hat = predict(train1A, newdata)
+MSPE = mean((valid$PSA_log - y.hat)^2)
+MSPE
+sse_tA/n
+PRESS_modA/n
+```
+
+#### Model B
+```{r}
+newdata = valid[, -8]
+y.hat = predict(train1B, newdata)
+MSPE = mean((valid$PSA_log - y.hat)^2)
+MSPE
+sse_tB/n
+PRESS_modB/n
+```
+
+#### Model C
+```{r}
+newdata = valid[, -8]
+y.hat = predict(train1C, newdata)
+MSPE = mean((valid$PSA_log - y.hat)^2)
+MSPE
+sse_tC/n
+PRESS_modC/n
+```
+
+#### Model D
+```{r}
+newdata = valid[, -8]
+y.hat = predict(train1D, newdata)
+MSPE = mean((valid$PSA_log - y.hat)^2)
+MSPE
+sse_tD/n
+PRESS_modD/n
+```
+
+#### We decided that Model C (Model 5 and 7) that was selected by BIC Forward Selection and BIC Forward Stepwise was the best model. Model C had a pretty low $Press_p$ value that was comparable to the other models.Except for the coefficient of GS7, the signs of the coefficents matched for every other coefficient. The difference in adjusted $R^2$ between the training data and the validation data was lowest in Model C and the SSE of Model C was approximately equal in Model C which was not the case in Models A,B and D. The $C_p$ was the lowest in Model C with a value of 3. The $MSPE_v$ was closest to the $SSE_t/n$ and $Press_p/n$ in model C meaning that Model C had the least amount of overfitting. 
